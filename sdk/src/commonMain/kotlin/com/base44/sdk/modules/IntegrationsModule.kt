@@ -141,17 +141,40 @@ class CoreIntegrations(
         return http.post(path("CreateFileSignedUrl"), body)
     }
 
-    /** Sends an email. */
+    /**
+     * Sends an email.
+     *
+     * At least one of [body], [html], or [text] is required; the backend returns 422 otherwise.
+     *
+     * | Fields set | Result |
+     * |---|---|
+     * | `body` or `html` alone | `text/html` email |
+     * | `text` alone | `text/plain` email |
+     * | `body`/`html` + `text` | `multipart/alternative` — one email, two representations; recipient sees whichever their client prefers — both parts must say the same thing |
+     * | `body` + `html` | **422** — same slot, set one not both |
+     *
+     * @param to Recipient email address.
+     * @param subject Email subject line.
+     * @param body HTML email body content. Alias of [html] — set one or the other, never both.
+     * @param html HTML email body content. The same thing as [body] under an explicit name.
+     * @param text Plain-text email body content. On its own sends a `text/plain` email; alongside
+     *   [body]/[html] produces a `multipart/alternative` email — both parts must say the same thing.
+     * @param from The name of the sender. If omitted, the app's name will be used.
+     */
     suspend fun sendEmail(
         to: String,
         subject: String,
-        body: String,
+        body: String? = null,
+        html: String? = null,
+        text: String? = null,
         from: String? = null,
     ): JsonElement {
         val payload = buildJsonObject {
             put("to", to)
             put("subject", subject)
-            put("body", body)
+            body?.let { put("body", it) }
+            html?.let { put("html", it) }
+            text?.let { put("text", it) }
             from?.let { put("from", it) }
         }
         return http.post(path("SendEmail"), payload)
