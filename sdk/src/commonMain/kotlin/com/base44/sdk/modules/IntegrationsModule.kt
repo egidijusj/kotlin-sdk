@@ -71,6 +71,32 @@ class IntegrationsModule(
         }
 }
 
+/**
+ * A file to attach to a [CoreIntegrations.sendEmail] call.
+ *
+ * Provide exactly one content source:
+ * - [content] — base64-encoded bytes generated at runtime (e.g. a PDF built in the function).
+ * - [fileUrl] — a URL returned by [CoreIntegrations.uploadFile] or [CoreIntegrations.uploadPrivateFile].
+ *
+ * Allowed extensions: pdf, png, jpg/jpeg, gif, webp, csv, txt, md, ics, xlsx, docx.
+ * Limits: up to 5 attachments, 5 MB each, 10 MB total.
+ *
+ * @param filename Attachment filename including extension.
+ * @param content Base64-encoded file content (mutually exclusive with [fileUrl]).
+ * @param fileUrl Storage URL from uploadFile/uploadPrivateFile (mutually exclusive with [content]).
+ */
+data class EmailAttachment(
+    val filename: String,
+    val content: String? = null,
+    val fileUrl: String? = null,
+) {
+    internal fun toJsonObject() = buildJsonObject {
+        put("filename", filename)
+        content?.let { put("content", it) }
+        fileUrl?.let { put("file_url", it) }
+    }
+}
+
 /** Typed wrappers for Base44 Core integration endpoints. */
 class CoreIntegrations(
     private val http: Base44HttpClient,
@@ -160,6 +186,9 @@ class CoreIntegrations(
      * @param text Plain-text email body content. On its own sends a `text/plain` email; alongside
      *   [body]/[html] produces a `multipart/alternative` email — both parts must say the same thing.
      * @param from The name of the sender. If omitted, the app's name will be used.
+     * @param attachments Up to 5 files to attach (5 MB each, 10 MB total). Each must have a
+     *   [EmailAttachment.filename] and exactly one of [EmailAttachment.content] (inline base64)
+     *   or [EmailAttachment.fileUrl] (storage reference).
      */
     suspend fun sendEmail(
         to: String,
@@ -168,6 +197,7 @@ class CoreIntegrations(
         html: String? = null,
         text: String? = null,
         from: String? = null,
+        attachments: List<EmailAttachment>? = null,
     ): JsonElement {
         val payload = buildJsonObject {
             put("to", to)
@@ -176,6 +206,9 @@ class CoreIntegrations(
             html?.let { put("html", it) }
             text?.let { put("text", it) }
             from?.let { put("from", it) }
+            attachments?.let { list ->
+                put("attachments", buildJsonArray { list.forEach { add(it.toJsonObject()) } })
+            }
         }
         return http.post(path("SendEmail"), payload)
     }
